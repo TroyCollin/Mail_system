@@ -1,27 +1,52 @@
-version: '3.8'
-
 services:
-  mailserver:
-    image: mailserver/docker-mailserver:latest
-    hostname: mail
-    domainname: qa.nattech.net
-    container_name: mailserver
+  traefik:
+    image: traefik:latest
+    container_name: traefik
     restart: always
     ports:
-      - "25:25"
-      - "143:143"
-      - "587:587"
-      - "993:993"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml
+      - ./traefik/acme.json:/acme.json
+    labels:
+      - "traefik.enable=true"
+
+  mailserver:
+    image: mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail
+    domainname: yourdomain.com
+    restart: always
+    env_file: .env
     volumes:
       - ./maildata:/var/mail
       - ./mailstate:/var/mail-state
       - ./config/:/tmp/docker-mailserver/
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
     environment:
       - ENABLE_SPAMASSASSIN=1
       - ENABLE_CLAMAV=1
       - ENABLE_FAIL2BAN=1
       - ONE_DIR=1
       - DMS_DEBUG=0
-    cap_add:
-      - NET_ADMIN
-      - SYS_PTRACE
+    ports:
+      - "25:25"
+      - "143:143"
+      - "587:587"
+      - "993:993"
+
+  rainloop:
+    image: hardware/rainloop
+    container_name: rainloop
+    restart: always
+    volumes:
+      - ./rainloop:/rainloop/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rainloop.rule=Host(`mail.yourdomain.com`)"
+      - "traefik.http.routers.rainloop.entrypoints=websecure"
+      - "traefik.http.routers.rainloop.tls.certresolver=myresolver"
